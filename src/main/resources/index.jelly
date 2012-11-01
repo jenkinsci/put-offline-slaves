@@ -1,0 +1,6 @@
+<!--
+  This view is used to render the installed plugins page.
+-->
+<div>
+  Add build step which put offline slaves. If this build step is configured the job will not start its execution until the configurad slaves is offline (or put temporary offline) and idle.
+</div>
