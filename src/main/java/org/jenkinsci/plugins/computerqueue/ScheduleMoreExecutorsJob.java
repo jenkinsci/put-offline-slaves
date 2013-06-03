@@ -29,7 +29,7 @@ import jenkins.model.Jenkins;
  */
 @Extension
 public class ScheduleMoreExecutorsJob extends QueueTaskDispatcher {
-
+    
     @Override
     public CauseOfBlockage canRun(Queue.Item item) {
         PutSlavesOfflineAction step = null;
@@ -38,21 +38,16 @@ public class ScheduleMoreExecutorsJob extends QueueTaskDispatcher {
             if (step != null) {
                 for (Node node : step.getNodes()) {
                     Queue.Item blockingItem = findBlockedItem(item, Jenkins.getInstance().getQueue().getItems());
+                    System.out.println("Node " + node.getDisplayName() + "  item " + blockingItem);
                     if(blockingItem!=null)
                         return new JobBlockage("Waiting until job " + blockingItem.getDisplayName() + " on " + node.getDisplayName() + "is finished");
                     if(node.toComputer().isOnline()){
-                        CauseOfBlockage blockage = takeOffline(node, item);
-                        if(blockage !=null)
-                            return blockage;
+                        takeOffline(node, item);
+                        return null;
                     }
                     else{
                         if(node.toComputer().isIdle())
                             return null;
-                        List<String> jobs = new ArrayList<String>();
-                        for(Executor executor:node.toComputer().getExecutors()){
-                            if(!executor.isIdle())
-                                jobs.add(executor.getCurrentWorkUnit().context.item.task.getDisplayName());
-                        }
                         return new JobBlockage("Waiting until running job on " + node.getDisplayName() + " is finished");
                     }
                 }
@@ -111,11 +106,9 @@ public class ScheduleMoreExecutorsJob extends QueueTaskDispatcher {
     public boolean canRunOnlyOnLabels(List<Node> nodes, Label label){
     List<Node> nodesOfLabel = new ArrayList<Node>();
         if (label == null) {
-            nodesOfLabel.addAll(Jenkins.getInstance().getNodes());
+            return false; //can run everywhere
         }
-        else{
-            nodesOfLabel.addAll(label.getNodes());
-        }
+        nodesOfLabel.addAll(label.getNodes());
         List<Node> nodesRemoving = new ArrayList<Node>();
         for(Node node: nodesOfLabel){
             if(node.toComputer()==null || node.toComputer().isOffline()){ //item can not run on this slave now
@@ -142,7 +135,7 @@ public class ScheduleMoreExecutorsJob extends QueueTaskDispatcher {
             }
         return true;
     }   
-
+    
     public class JobBlockage extends CauseOfBlockage {
 
         private String message;

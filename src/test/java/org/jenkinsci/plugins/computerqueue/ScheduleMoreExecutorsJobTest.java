@@ -13,18 +13,21 @@ import hudson.model.Queue.NotWaitingItem;
 import hudson.model.Queue.WaitingItem;
 import hudson.model.Slave;
 import hudson.model.labels.LabelAtom;
+import hudson.tasks.Shell;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.GregorianCalendar;
 import java.util.List;
+import org.junit.Rule;
 import org.jvnet.hudson.test.HudsonTestCase;
+import org.jvnet.hudson.test.JenkinsRule;
 
 /**
  *
  * @author lucinka
  */
 public class ScheduleMoreExecutorsJobTest extends HudsonTestCase{
- 
+    
     private ScheduleMoreExecutorsJob schedule = new ScheduleMoreExecutorsJob();
     
     private Project project1;
@@ -117,5 +120,54 @@ public class ScheduleMoreExecutorsJobTest extends HudsonTestCase{
         assertTrue("Method findBlockingItem() does not return right blocking item.",item.equals(item1)|| item.equals(item2));
         item5 = new BuildableItem((WaitingItem)item5);     
         item6 = new BuildableItem((WaitingItem)item6);        
+    }
+    
+    public void testIfNotInterruptAlreadyRunningJob() throws IOException, InterruptedException{
+        project4.getBuildersList().add(new Shell("sleep 20"));
+        jenkins.getQueue().schedule(project4,0);
+        jenkins.getQueue().schedule(project2,1);
+        Thread.sleep(1000);      
+        assertTrue("Job + " + project2.getDisplayName() + " did not wait until a running job is finished", project2.isInQueue() && project4.isBuilding());
+    }
+    
+    public void testIfLetRunOlderJob() throws IOException, InterruptedException{
+        project4.getBuildersList().add(new Shell("sleep 1"));
+        project5.setAssignedLabel(project4.getAssignedLabel());
+        project5.getBuildersList().add(new Shell("sleep 20"));
+        jenkins.getQueue().schedule(project4,0);
+        jenkins.getQueue().schedule(project5,1);
+        jenkins.getQueue().schedule(project2,2);
+        while(project4.getLastBuild()==null || project4.getLastBuild().getResult()==null){
+            Thread.sleep(1000);
+        }  
+        Thread.sleep(2000);
+        assertTrue("Job + " + project2.getDisplayName() + " did not let older job run", project2.isInQueue() && (project5.isBuilding()||project5.getLastBuild().getResult()!=null));
+    }
+    
+    public void testIfNotLetRunOlderJob() throws IOException, InterruptedException{
+        project4.getBuildersList().add(new Shell("sleep 1"));
+        project5.setAssignedLabel(project4.getAssignedLabel());
+        project5.getBuildersList().add(new Shell("sleep 20"));
+        jenkins.getQueue().schedule(project4,0);
+        jenkins.getQueue().schedule(project2,1);
+        jenkins.getQueue().schedule(project5,2);
+        while(project4.getLastBuild()==null || project4.getLastBuild().getResult()==null){
+            Thread.sleep(1000);
+        }  
+        assertTrue("Job + " + project2.getDisplayName() + " let younger job run", project5.isInQueue() && (project2.isBuilding()|| project2.getLastBuild().getResult()!=null));
+    }
+    
+    public void testIfNotStuckWithTwoPutSlavesOfflineAction() throws IOException, InterruptedException{
+        project4.getBuildersList().add(new Shell("sleep 5"));
+        jenkins.getQueue().schedule(project4,0);
+        project3.getBuildersList().add(new Shell("sleep 20"));
+        jenkins.getQueue().schedule(project3,0);
+        jenkins.getQueue().schedule(project2,1);
+        while(project4.getLastBuild()==null || project4.getLastBuild().getResult()==null){
+            Thread.sleep(1000);
+        }
+        Thread.sleep(2000);
+        assertFalse("Jobs stuck in queue", project2.isInQueue() &&  project3.isInQueue());
+        assertTrue("Job + " + project2.getDisplayName() + " let younger job run with PutSlaveOfflineAction", project2.isInQueue() && (project3.isBuilding()|| project3.getLastBuild().getResult()!=null));
     }
 }
